@@ -28,75 +28,80 @@ import fitnesse.wiki.WikiPage;
 import fitnesse.wiki.WikiPagePath;
 
 public class TestHelper {
-   private final String fitNesseRootPath;
-   private final String outputPath;
-   private final TestSystemListener resultListener;
-   @SuppressWarnings( "unused" ) private boolean debug = true;
-   private FitNesseContext context;
-   private SuiteHistoryFormatter suiteHistoryFormatter;
 
-   public TestHelper( final String fitNesseRootPath, final String outputPath, final TestSystemListener resultListener ) {
-      this.fitNesseRootPath = fitNesseRootPath;
-      this.outputPath = outputPath;
-      this.resultListener = resultListener;
-   }
+	private final String fitNesseRootPath;
+	private final String outputPath;
+	private final TestSystemListener resultListener;
+	@SuppressWarnings("unused")
+	private boolean debug = true;
+	private FitNesseContext context;
+	private SuiteHistoryFormatter suiteHistoryFormatter;
 
-   public TestSummary run( final int port, final Launch... launches ) throws Exception {
-      ContextConfigurator contextConfigurator = ContextConfigurator.systemDefaults();
-      contextConfigurator.withPort( port );
-      contextConfigurator.withRootPath( this.fitNesseRootPath );
-      context = contextConfigurator.makeFitNesseContext();
+	public TestHelper(final String fitNesseRootPath, final String outputPath, final TestSystemListener resultListener) {
+		this.fitNesseRootPath = fitNesseRootPath;
+		this.outputPath = outputPath;
+		this.resultListener = resultListener;
+	}
 
-      final TestSummary global = new TestSummary();
+	public TestSummary run(final int port, final Launch... launches) throws Exception {
+		ContextConfigurator contextConfigurator = ContextConfigurator.systemDefaults();
+		contextConfigurator.withPort(port);
+		contextConfigurator.withRootPath(this.fitNesseRootPath);
+		context = contextConfigurator.makeFitNesseContext();
 
-      for( final Launch launch : launches ){
-         global.add( run( launch, port ) );
-      }
-      return global;
-   }
+		final TestSummary global = new TestSummary();
 
-   public TestSummary run( final Launch launch, final int port ) throws Exception {
-      MavenJavaFormatter htmlResultsFormatter = new MavenJavaFormatter( launch.getPageName() );
-      htmlResultsFormatter.setResultsRepository( new MavenJavaFormatter.FolderResultsRepository( this.outputPath ) );
+		for (final Launch launch : launches) {
+			global.add(run(launch, port));
+		}
+		return global;
+	}
 
-      WikiPage suiteRootPage = determineSuiteRootPage( launch.getPageName() );
-      JunitReFormatter xmlResultsFormatter = new JunitReFormatter( context, context.getRootPage(), makeXmlReportWriter(), makeSuiteHistoryFormatter( suiteRootPage ));
+	public TestSummary run(final Launch launch, final int port) throws Exception {
+		MavenJavaFormatter htmlResultsFormatter = new MavenJavaFormatter(launch.getPageName());
+		htmlResultsFormatter.setResultsRepository(new MavenJavaFormatter.FolderResultsRepository(this.outputPath));
 
-      List<WikiPage> pagesToExecute = new SuiteContentsFinder( suiteRootPage, null, context.getRootPage() ).getAllPagesToRunForThisSuite();
-      final PagesByTestSystem pagesByTestSystem = new PagesByTestSystem( pagesToExecute, context.getRootPage() );
-      MultipleTestsRunner testRunner = new MultipleTestsRunner( pagesByTestSystem, context.testSystemFactory );
-      testRunner.addTestSystemListener( resultListener );
-      testRunner.addTestSystemListener( htmlResultsFormatter );
-      testRunner.addTestSystemListener( suiteHistoryFormatter );
-      testRunner.addExecutionLogListener( suiteHistoryFormatter );
-      testRunner.addTestSystemListener( xmlResultsFormatter );
+		WikiPage suiteRootPage = determineSuiteRootPage(launch.getPageName());
+		JunitReFormatter xmlResultsFormatter =
+				new JunitReFormatter(context, context.getRootPage(), makeXmlReportWriter(), makeSuiteHistoryFormatter(suiteRootPage));
 
-      testRunner.executeTestPages();
-      htmlResultsFormatter.close();
-      return htmlResultsFormatter.getTotalSummary();
-   }
+		List<WikiPage> pagesToExecute =
+				new SuiteContentsFinder(suiteRootPage, null, context.getRootPage()).getAllPagesToRunForThisSuite();
+		final PagesByTestSystem pagesByTestSystem = new PagesByTestSystem(pagesToExecute, context.getRootPage());
+		MultipleTestsRunner testRunner = new MultipleTestsRunner(pagesByTestSystem, context.testSystemFactory);
+		testRunner.addTestSystemListener(resultListener);
+		testRunner.addTestSystemListener(htmlResultsFormatter);
+		testRunner.addTestSystemListener(suiteHistoryFormatter);
+		testRunner.addExecutionLogListener(suiteHistoryFormatter);
+		testRunner.addTestSystemListener(xmlResultsFormatter);
 
-   public void setDebugMode( final boolean enabled ) {
-      this.debug = enabled;
-   }
+		testRunner.executeTestPages();
+		htmlResultsFormatter.close();
+		return htmlResultsFormatter.getTotalSummary();
+	}
 
-   private WikiPage determineSuiteRootPage( final String suiteName ) {
-      WikiPagePath path = PathParser.parse( suiteName );
-      PageCrawler crawler = context.getRootPage().getPageCrawler();
-      return crawler.getPage( path );
-   }
+	public void setDebugMode(final boolean enabled) {
+		this.debug = enabled;
+	}
 
-   private SuiteHistoryFormatter makeSuiteHistoryFormatter( WikiPage page ) {
-      if( suiteHistoryFormatter == null ){
-         HistoryWriterFactory source = new HistoryWriterFactory();
-         suiteHistoryFormatter = new SuiteHistoryFormatter( context, page, source );
-      }
-      return suiteHistoryFormatter;
-   }
+	private WikiPage determineSuiteRootPage(final String suiteName) {
+		WikiPagePath path = PathParser.parse(suiteName);
+		PageCrawler crawler = context.getRootPage().getPageCrawler();
+		return crawler.getPage(path);
+	}
 
-   private Writer makeXmlReportWriter() throws IOException {
-      OpenOption[] options = { StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING };
-      BufferedWriter writer = Files.newBufferedWriter( Paths.get( this.outputPath + "/junit-report.xml" ), StandardCharsets.UTF_8, options );
-      return writer;
-   }
+	private SuiteHistoryFormatter makeSuiteHistoryFormatter(WikiPage page) {
+		if (suiteHistoryFormatter == null) {
+			HistoryWriterFactory source = new HistoryWriterFactory();
+			suiteHistoryFormatter = new SuiteHistoryFormatter(context, page, source);
+		}
+		return suiteHistoryFormatter;
+	}
+
+	private Writer makeXmlReportWriter() throws IOException {
+		OpenOption[] options = { StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING };
+		BufferedWriter writer =
+				Files.newBufferedWriter(Paths.get(this.outputPath + "/junit-report.xml"), StandardCharsets.UTF_8, options);
+		return writer;
+	}
 }

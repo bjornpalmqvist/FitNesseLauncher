@@ -16,6 +16,7 @@ import static org.mockito.Mockito.verify;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.ServerSocket;
 
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.project.MavenProject;
@@ -31,117 +32,129 @@ import fitnesse.ContextConfigurator;
 import fitnesse.FitNesse;
 
 @Ignore
-public class WikiMojoTest extends MojoTest{
-   private FitNesse fitNesse;
-   private FitNesseHelper fitNesseHelper;
-   private WikiMojo mojo;
+public class WikiMojoTest extends MojoTest {
 
-   @Before @Override public void beforeEachTest() throws Exception {
-      super.beforeEachTest();
-      fitNesseHelper = mock( FitNesseHelper.class );
+	private FitNesse fitNesse;
+	private FitNesseHelper fitNesseHelper;
+	private WikiMojo mojo;
+	private ServerSocket serverSocket;
 
-      ContextConfigurator contextConfigurator = ContextConfigurator.systemDefaults();
-      contextConfigurator.withPort( PORT );
-      fitNesse = new FitNesse( contextConfigurator.makeFitNesseContext() );
-      fitNesse.start();
+	@Before
+	@Override
+	public void beforeEachTest() throws Exception {
+		super.beforeEachTest();
+		fitNesseHelper = mock(FitNesseHelper.class);
 
-      mojo = new WikiMojo();
-      mojo.fitNesseHelper = this.fitNesseHelper;
-      mojo.port = PORT;
-      mojo.workingDir = "fitnesse";
-      mojo.root = FitNesseHelper.DEFAULT_ROOT;
-      mojo.project = new MavenProject();
-      mojo.project.setFile( new File( getClass().getResource( "pom.xml" ).getPath() ) );
+		ContextConfigurator contextConfigurator = ContextConfigurator.systemDefaults();
+		contextConfigurator.withPort(PORT);
+		fitNesse = new FitNesse(contextConfigurator.makeFitNesseContext());
 
-      mojo.setLog( log );
-   }
+		fitNesse.start(serverSocket = new ServerSocket(PORT));
 
-   @After @Override public void afterEachTest() throws Exception {      
-      if( fitNesse != null ){
-         fitNesse.stop();
-      }
-      super.afterEachTest();
-   }
+		mojo = new WikiMojo();
+		mojo.fitNesseHelper = this.fitNesseHelper;
+		mojo.port = PORT;
+		mojo.workingDir = "fitnesse";
+		mojo.root = FitNesseHelper.DEFAULT_ROOT;
+		mojo.project = new MavenProject();
+		mojo.project.setFile(new File(getClass().getResource("pom.xml").getPath()));
 
-   @Test
-   public void testWikiMojoBasic() throws Exception {
-      mojo.createSymLink = false;
+		mojo.setLog(log);
+	}
 
-      new Interrupter( Thread.currentThread(), 50L ).start();
-      mojo.executeInternal();
+	@After
+	@Override
+	public void afterEachTest() throws Exception {
+		if (fitNesse != null) {
+			fitNesse.stop();
+		}
+		serverSocket.close();
+		super.afterEachTest();
+	}
 
-      verify( fitNesseHelper, times( 1 ) ).launchFitNesseServer( PORT_STRING, mojo.workingDir, mojo.root, mojo.logDir, mojo.authentication );
-      verify( fitNesseHelper, never() ).createSymLink( any( File.class ), anyString(), anyInt(), any( Launch.class ) );
-      verify( fitNesseHelper, times( 1 ) ).shutdownFitNesseServer( PORT_STRING );
+	@Test
+	public void testWikiMojoBasic() throws Exception {
+		mojo.createSymLink = false;
 
-      assertThat( logStream.toString(), containsLine( "[INFO] FitNesse wiki server launched." ));
-      assertThat( logStream.toString(), containsLine( "[INFO] FitNesse wiki server interrupted!" ));
-      assertThat( logStream.toString(), containsLine( "[INFO] FitNesse wiki server is shutdown." ));
-   }
+		new Interrupter(Thread.currentThread(), 50L).start();
+		mojo.executeInternal();
 
-   @Test
-   public void testWikiMojoCreateSymLink() throws Exception {
-      mojo.createSymLink = true;
-      mojo.testResourceDirectory = "testResourceDirectory";
-      Launch launch = new Launch( "suite", "test" );
-      new Interrupter( Thread.currentThread(), 100L ).start();
+		verify(fitNesseHelper, times(1)).launchFitNesseServer(PORT_STRING, mojo.workingDir, mojo.root, mojo.logDir,
+				mojo.authentication);
+		verify(fitNesseHelper, never()).createSymLink(any(File.class), anyString(), anyInt(), any(Launch.class));
+		verify(fitNesseHelper, times(1)).shutdownFitNesseServer(PORT_STRING);
 
-      mojo.executeInternal( launch );
+		assertThat(logStream.toString(), containsLine("[INFO] FitNesse wiki server launched."));
+		assertThat(logStream.toString(), containsLine("[INFO] FitNesse wiki server interrupted!"));
+		assertThat(logStream.toString(), containsLine("[INFO] FitNesse wiki server is shutdown."));
+	}
 
-      verify( fitNesseHelper, times( 1 ) ).launchFitNesseServer( PORT_STRING, mojo.workingDir, mojo.root, mojo.logDir, mojo.authentication );
-      verify( fitNesseHelper, times( 1 ) ).createSymLink( mojo.project.getBasedir(), mojo.testResourceDirectory, PORT, launch );
-      verify( fitNesseHelper, times( 1 ) ).shutdownFitNesseServer( PORT_STRING );
-      assertThat( logStream.toString(), containsLine( "[INFO] FitNesse wiki server launched." ));
-      assertThat( logStream.toString(), containsLine( "[INFO] FitNesse wiki server interrupted!" ));
-      assertThat( logStream.toString(), containsLine( "[INFO] FitNesse wiki server is shutdown." ));
-   }
+	@Test
+	public void testWikiMojoCreateSymLink() throws Exception {
+		mojo.createSymLink = true;
+		mojo.testResourceDirectory = "testResourceDirectory";
+		Launch launch = new Launch("suite", "test");
+		new Interrupter(Thread.currentThread(), 100L).start();
 
-   @Test
-   public void testWikiLaunchException() throws Exception {
-      doThrow( new IOException( "TEST" ) ).when( fitNesseHelper ).launchFitNesseServer( anyString(), anyString(), anyString(), anyString(), anyString() );
+		mojo.executeInternal(launch);
 
-      try{
-         mojo.executeInternal();
-         fail( "Expected MojoExecutionException" );
-      }catch( MojoExecutionException e ){
-         assertEquals( "Exception launching FitNesse", e.getMessage() );
-         assertEquals( IOException.class, e.getCause().getClass() );
-      }
+		verify(fitNesseHelper, times(1)).launchFitNesseServer(PORT_STRING, mojo.workingDir, mojo.root, mojo.logDir,
+				mojo.authentication);
+		verify(fitNesseHelper, times(1)).createSymLink(mojo.project.getBasedir(), mojo.testResourceDirectory, PORT, launch);
+		verify(fitNesseHelper, times(1)).shutdownFitNesseServer(PORT_STRING);
+		assertThat(logStream.toString(), containsLine("[INFO] FitNesse wiki server launched."));
+		assertThat(logStream.toString(), containsLine("[INFO] FitNesse wiki server interrupted!"));
+		assertThat(logStream.toString(), containsLine("[INFO] FitNesse wiki server is shutdown."));
+	}
 
-      verify( fitNesseHelper, times( 1 ) ).shutdownFitNesseServer( PORT_STRING );
-      assertThat( logStream.toString(), containsLine( "[INFO] FitNesse wiki server is shutdown." ));
-   }
+	@Test
+	public void testWikiLaunchException() throws Exception {
+		doThrow(new IOException("TEST")).when(fitNesseHelper).launchFitNesseServer(anyString(), anyString(), anyString(), anyString(),
+				anyString());
 
-   @Test
-   public void testServiceThreadFinishesWithoutInterrupt() throws Exception {
-      new Thread() {
-         @Override
-         public void run() {
-            try{
-               Thread.sleep( 500L );
-               fitNesse.stop();
-            }catch( Exception e ){
-               e.printStackTrace();
-            }
-         }
-      }.start();
-      mojo.executeInternal();
+		try {
+			mojo.executeInternal();
+			fail("Expected MojoExecutionException");
+		} catch (MojoExecutionException e) {
+			assertEquals("Exception launching FitNesse", e.getMessage());
+			assertEquals(IOException.class, e.getCause().getClass());
+		}
 
-      verify( fitNesseHelper, times( 1 ) ).shutdownFitNesseServer( PORT_STRING );
-      assertThat( logStream.toString(), containsLine( "[INFO] FitNesse wiki server launched." ));
-      assertThat( logStream.toString(), containsLine( "[INFO] FitNesse wiki server is shutdown." ));
-   }
+		verify(fitNesseHelper, times(1)).shutdownFitNesseServer(PORT_STRING);
+		assertThat(logStream.toString(), containsLine("[INFO] FitNesse wiki server is shutdown."));
+	}
 
-   @Test
-   public void testFitNesseNotRunning() throws Exception {
-      fitNesse.stop();
-      doNothing().when( fitNesseHelper ).launchFitNesseServer( anyString(), anyString(), anyString(), anyString(), anyString() );
-      Thread.sleep( 100 );
+	@Test
+	public void testServiceThreadFinishesWithoutInterrupt() throws Exception {
+		new Thread() {
 
-      mojo.executeInternal();
+			@Override
+			public void run() {
+				try {
+					Thread.sleep(500L);
+					fitNesse.stop();
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		}.start();
+		mojo.executeInternal();
 
-      verify( fitNesseHelper, times( 1 ) ).shutdownFitNesseServer( PORT_STRING );
-      assertThat( logStream.toString(), containsLine( "[WARNING] Could not identify FitNesse service Thread." ));
-      assertThat( logStream.toString(), containsLine( "[INFO] FitNesse wiki server is shutdown." ));
-   }
+		verify(fitNesseHelper, times(1)).shutdownFitNesseServer(PORT_STRING);
+		assertThat(logStream.toString(), containsLine("[INFO] FitNesse wiki server launched."));
+		assertThat(logStream.toString(), containsLine("[INFO] FitNesse wiki server is shutdown."));
+	}
+
+	@Test
+	public void testFitNesseNotRunning() throws Exception {
+		fitNesse.stop();
+		doNothing().when(fitNesseHelper).launchFitNesseServer(anyString(), anyString(), anyString(), anyString(), anyString());
+		Thread.sleep(100);
+
+		mojo.executeInternal();
+
+		verify(fitNesseHelper, times(1)).shutdownFitNesseServer(PORT_STRING);
+		assertThat(logStream.toString(), containsLine("[WARNING] Could not identify FitNesse service Thread."));
+		assertThat(logStream.toString(), containsLine("[INFO] FitNesse wiki server is shutdown."));
+	}
 }
